@@ -49,6 +49,19 @@ Each layer has one job, which makes the code easy to test and extend.
 - Transaction, ValidationError, and other core objects are immutable
 - Thread-safe by default, prevents accidental bugs
 
+**ScopedValue for thread-safe validation state**
+- Java 25's ScopedValue is used to maintain per-validation uniqueness state
+- Each validation run gets its own isolated scope, preventing cross-contamination
+- No need for thread-local variables or synchronization
+- Automatically cleaned up when validation completes
+- Enables safe concurrent validation of multiple files
+
+**Virtual Threads for async processing**
+- Async validation jobs use Java 25 virtual threads (Project Loom)
+- Millions of virtual threads can run concurrently with minimal overhead
+- Much more efficient than traditional thread pools for I/O-bound operations
+- Configured via Spring's TaskExecutor with configurable pool sizes
+
 ## API Endpoints
 
 - `POST /api/v1/validation/validate` - Sync validation (max 250 MB, returns result immediately)
@@ -80,6 +93,19 @@ All responses are JSON, even if you upload a CSV file. The report ID is the file
 The service is stateless (except for job/report storage in MongoDB), so you can run multiple instances behind a load balancer. Each file is validated independently, and uniqueness is only checked within a single file (not across files).
 
 For very large files, use the async endpoint. It returns immediately (202 Accepted) and processes in the background using virtual threads.
+
+**Performance Characteristics:**
+- **Memory**: Constant memory usage regardless of file size (streaming)
+- **CPU**: Single-threaded per file validation (can process multiple files concurrently)
+- **I/O**: Streaming reads minimize disk I/O overhead
+- **Database**: Batch writes for errors (1000 per batch by default)
+- **Concurrency**: Virtual threads enable high concurrency for async jobs
+
+**Scaling Considerations:**
+- MongoDB can be scaled horizontally (replica sets, sharding)
+- Application instances are stateless and can be horizontally scaled
+- File deduplication works across instances (same hash = same report ID)
+- Consider MongoDB connection pool sizing for high concurrency
 
 ## Adding New Features
 

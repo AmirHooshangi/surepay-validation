@@ -30,20 +30,101 @@ For detailed architectural decisions and design rationale, see [ARCHITECTURE.md]
 
 - Java 25 or higher
 - Maven 3.8+
+- MongoDB 7.0+ (for persistent storage)
 
-### Build
+### Local Development
+
+#### 1. Start MongoDB
+
+You can use Docker Compose to start MongoDB:
+
+```bash
+docker-compose up -d mongodb
+```
+
+Or run MongoDB locally and configure the connection in `application.yml`.
+
+#### 2. Build
 
 ```bash
 mvn clean install
 ```
 
-### Run
+#### 3. Run
 
 ```bash
 mvn spring-boot:run
 ```
 
 The service will start on `http://localhost:8080`
+
+### Docker Deployment
+
+#### Using Docker Compose (Recommended)
+
+```bash
+# Build and start all services (MongoDB + Validation Service)
+docker-compose up -d
+
+# View logs
+docker-compose logs -f validation-service
+
+# Stop services
+docker-compose down
+```
+
+The service will be available at `http://localhost:8080`
+
+#### Using Docker directly
+
+```bash
+# Build image
+docker build -t transaction-validation-service .
+
+# Run with MongoDB connection
+docker run -p 8080:8080 \
+  -e SPRING_DATA_MONGODB_URI=mongodb://admin:admin123@host.docker.internal:27017/validation_db?authSource=admin \
+  transaction-validation-service
+```
+
+### Configuration
+
+The service can be configured via `application.yml` or environment variables:
+
+**Key Configuration Options:**
+
+- `validation.balance.tolerance` (default: 0.01) - Tolerance for balance mismatch checks
+- `validation.error.batch-size` (default: 1000) - Batch size for error storage
+- `validation.pagination.default-page-size` (default: 1000) - Default pagination size
+- `validation.pagination.max-page-size` (default: 10000) - Maximum pagination size
+- `spring.servlet.multipart.max-file-size` (default: 2560MB) - Maximum file size for async validation
+- `spring.task.execution.pool.core-size` (default: 5) - Async thread pool core size
+- `spring.task.execution.pool.max-size` (default: 10) - Async thread pool max size
+
+**MongoDB Connection:**
+
+Set `SPRING_DATA_MONGODB_URI` environment variable or configure in `application.yml`:
+
+```yaml
+spring:
+  data:
+    mongodb:
+      uri: mongodb://username:password@host:27017/database?authSource=admin
+```
+
+### Testing
+
+Run all tests:
+
+```bash
+mvn test
+```
+
+Run tests with coverage:
+
+```bash
+mvn test jacoco:report
+```
 
 ## API Endpoints
 
@@ -218,15 +299,42 @@ Reference,AccountNumber,Description,Start Balance,Mutation,End Balance
 
 
 
+## Performance Considerations
+
+- **Streaming Processing**: Files are processed one transaction at a time, keeping memory usage constant
+- **Hash-based Deduplication**: Files are hashed using xxHash128 for fast duplicate detection
+- **Virtual Threads**: Async validation uses Java 25 virtual threads for efficient concurrency
+- **Separate Error Storage**: Errors are stored separately to avoid MongoDB's 16MB document limit
+- **Pagination**: Large error sets are paginated to prevent memory issues
+
+## Troubleshooting
+
+**MongoDB Connection Issues:**
+- Ensure MongoDB is running and accessible
+- Check connection string format and credentials
+- Verify network connectivity (firewall, Docker networking)
+
+**File Size Limits:**
+- Synchronous validation: 250 MB (hardcoded limit)
+- Asynchronous validation: 2.5 GB (configurable via `spring.servlet.multipart.max-file-size`)
+
+**Memory Issues:**
+- For very large files, use the async endpoint
+- Adjust JVM heap size: `-Xmx8g` (default in Docker)
+- Monitor MongoDB connection pool settings
+
 ## Future Enhancements
 
-- Securing the REST endponts
-- Horizental scalability in Kubernetes or resource based in AWS..
-- More file formats (XML, Excel)
-- Metrics and observability
-- IBAN validation
-- Batch processing API
-- Retry failed job: API endpoint to retry a failed validation job without resubmitting the file
+- **Security**: Securing the REST endpoints (authentication, authorization)
+- **Documentation**: Code-level documentation (JavaDoc)
+- **Scalability**: Horizontal scalability in Kubernetes or resource-based scaling in AWS
+- **File Formats**: Support for more file formats (XML, Excel)
+- **Observability**: Metrics and observability (Prometheus, Grafana, distributed tracing)
+- **Validation**: IBAN validation for account numbers
+- **Batch Processing**: Batch processing API for multiple files
+- **Job Management**: Retry failed job API endpoint to retry a failed validation job without resubmitting the file
+- **Rate Limiting**: API rate limiting and throttling
+- **Webhooks**: Webhook notifications for async job completion
 
 
 
