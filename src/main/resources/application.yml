@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: transaction-validation-service
+  
+  servlet:
+    multipart:
+      max-file-size: 2560MB
+      max-request-size: 2560MB
+  
+  task:
+    execution:
+      pool:
+        core-size: 5
+        max-size: 10
+        queue-capacity: 100
+      thread-name-prefix: validation-async-
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.surepay.validation: INFO
+    org.springframework: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+validation:
+  balance:
+    tolerance: 0.01
+  error:
+    batch-size: 1000
+  pagination:
+    default-page-size: 1000
+    max-page-size: 10000
+

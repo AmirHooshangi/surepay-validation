@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # MongoDB for storing validation reports
+  mongodb:
+    image: mongo:7.0
+    container_name: validation-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    command: mongod --quiet --logpath /proc/1/fd/1 --logappend
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_DATABASE: validation_db
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - validation-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Spring Boot Application
+  validation-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: validation-service
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+        reservations:
+          memory: 8g
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      
+      SPRING_DATA_MONGODB_URI: mongodb://admin:admin123@mongodb:27017/validation_db?authSource=admin&maxPoolSize=50&minPoolSize=5&maxIdleTimeMS=30000
+      
+      SERVER_PORT: 8080
+      LOGGING_LEVEL_COM_SUREPAY_VALIDATION: INFO
+    volumes:
+      - ./profiling:/app/profiling
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - validation-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/v1/validation/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+
+networks:
+  validation-network:
+    driver: bridge
+
